@@ -44,6 +44,7 @@ namespace DynamoDbPartiqlCustom
         public Document[] Items { get; set; }
 
         public T[] GetItems<T>() => this.Items.Select(doc => JsonConvert.DeserializeObject<T>(doc.ToJson())).ToArray();
+        public T[] GetItems<T>(T type) => this.Items.Select(doc => JsonConvert.DeserializeObject<T>(doc.ToJson())).ToArray();
     }
 
     class PartiqlResponseUnmarshaller : JsonResponseUnmarshaller
@@ -99,9 +100,19 @@ namespace DynamoDbPartiqlCustom
             var client = new CustomClient();
             var res = await client.Select(request);
 
-            
-            var list =res.GetItems<(string key, string value)> ();
+            var a = new { key = default(string), value = default(float?) };
+            var type = a.GetType();
 
+            //var list = res.GetItems(a);
+            var list =res.GetItems<query1> ();
+            
+            foreach(var item in list)
+            {
+                var key = item.key;
+            }
+
+            var list2 = res.Items.Select(doc => JsonConvert.DeserializeObject<(string key, string value)>(doc.ToJson())).ToArray();
+            
 
             //var awsCredentials = new Amazon.Runtime.AWSCredentials();
 
@@ -109,5 +120,10 @@ namespace DynamoDbPartiqlCustom
             //var cc = new Amazon.Runtime.BasicAWSCredentials();
             //Console.WriteLine("Hello World!");
         }
+
+        
     }
+
+    record query1(string key, string value);
 }
+
