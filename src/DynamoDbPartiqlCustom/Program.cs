@@ -1,13 +1,18 @@
 ﻿using System;
+using System.Linq;
 using System.IO;
 using System.Net;
 using System.Threading.Tasks;
+using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
 using Amazon.DynamoDBv2.Model.Internal.MarshallTransformations;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
 using Amazon.Runtime.Internal.Auth;
 using Amazon.Runtime.Internal.Transform;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Collections.Generic;
 
 namespace DynamoDbPartiqlCustom
 {
@@ -29,28 +34,51 @@ namespace DynamoDbPartiqlCustom
             options.RequestMarshaller = ExecuteStatementRequestMarshaller.Instance;
             options.ResponseUnmarshaller = new PartiqlResponseUnmarshaller();
 
-            return InvokeAsync<PartiqlResponse>(request, options, cancellationToken);
+            var invokeResult = InvokeAsync<PartiqlResponse>(request, options, cancellationToken);
+            return invokeResult;
         }
-
-
     }
 
     class PartiqlResponse : AmazonWebServiceResponse
     {
-        public string Items { get; set; }
+        public Document[] Items { get; set; }
+
+        public T[] GetItems<T>() => this.Items.Select(doc => JsonConvert.DeserializeObject<T>(doc.ToJson())).ToArray();
     }
 
     class PartiqlResponseUnmarshaller : JsonResponseUnmarshaller
     {
-        public override AmazonWebServiceResponse Unmarshall(JsonUnmarshallerContext input)
+        public override AmazonWebServiceResponse Unmarshall(JsonUnmarshallerContext context)
         {
-            using var reader = new StreamReader(input.Stream);
-            
-            var str = reader.ReadToEnd();
+            context.Read();
+            int targetDepth = context.CurrentDepth;
+
+            List<Dictionary<string, AttributeValue>> items = null;
+            string nextToken = null;
+            while (context.ReadAtDepth(targetDepth))
+            {
+                if (context.TestExpression("Items", targetDepth))
+                {
+                    var unmarshaller = new ListUnmarshaller<Dictionary<string, AttributeValue>, DictionaryUnmarshaller<string, AttributeValue, StringUnmarshaller, AttributeValueUnmarshaller>>(new DictionaryUnmarshaller<string, AttributeValue, StringUnmarshaller, AttributeValueUnmarshaller>(StringUnmarshaller.Instance, AttributeValueUnmarshaller.Instance));
+                    items = unmarshaller.Unmarshall(context);
+                    continue;
+                }
+                if (context.TestExpression("NextToken", targetDepth))
+                {
+                    var unmarshaller = StringUnmarshaller.Instance;
+                    nextToken = unmarshaller.Unmarshall(context);
+                    continue;
+                }
+            }
+
+            //using var reader = new StreamReader(context.Stream);
+
+            //var str = reader.ReadToEnd();
+
 
             return new PartiqlResponse()
             {
-                Items = str
+                Items = items.Select(attributeMap => Document.FromAttributeMap(attributeMap)).ToArray()
             };
         }
 
@@ -70,6 +98,10 @@ namespace DynamoDbPartiqlCustom
             };
             var client = new CustomClient();
             var res = await client.Select(request);
+
+            
+            var list =res.GetItems<(string key, string value)> ();
+
 
             //var awsCredentials = new Amazon.Runtime.AWSCredentials();
 
